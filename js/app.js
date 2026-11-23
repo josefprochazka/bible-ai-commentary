@@ -530,7 +530,8 @@ async function loadModelsInto(key) {
 }
 
 function validKeyFormat(k) {
-  return /^[A-Za-z0-9_\-]{20,200}$/.test(k);
+  // Google má klíče „AIza…“ i novější „AQ.…“ (s tečkou).
+  return /^[A-Za-z0-9._\-]{20,200}$/.test(k);
 }
 
 function updateKeyBanner() {
@@ -558,7 +559,7 @@ function setupSettings() {
   });
   $('#btn-save-settings').addEventListener('click', async () => {
     const key = $('#api-key').value.trim();
-    if (key && !validKeyFormat(key)) return settingsStatus('Klíč má neplatný formát (bez mezer, 20+ znaků).', 'error');
+    if (key && !validKeyFormat(key)) return settingsStatus('Klíč má neplatný formát (povolená jsou písmena, číslice a znaky . _ -, bez mezer, aspoň 20 znaků).', 'error');
     const model = $('#model').value;
     if (!isValidModel(model)) return settingsStatus('Neplatný model.', 'error');
     if (!key) {

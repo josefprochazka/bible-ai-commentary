@@ -1,6 +1,7 @@
 // Volání Google Gemini API přímo z prohlížeče. Klíč jde jen do hlavičky na googleapis.com.
 const BASE = 'https://generativelanguage.googleapis.com/v1beta';
-export const DEFAULT_MODEL = 'gemini-2.5-flash';
+// Alias Googlu, který vždy ukazuje na aktuální model „flash“.
+export const DEFAULT_MODEL = 'gemini-flash-latest';
 const MODEL_RE = /^[a-z0-9][a-z0-9.\-]{1,80}$/;
 
 export class AiError extends Error {
@@ -53,7 +54,7 @@ function toError(status, data) {
   if (status === 400 && /api key/i.test(msg)) text = 'API klíč není platný. Zkontroluj ho v Nastavení.';
   else if (status === 400) text = `Google AI požadavek odmítlo: ${msg}`;
   else if (status === 401 || status === 403) text = 'Klíč nemá oprávnění. Zkontroluj klíč a jeho omezení v Google Cloud.';
-  else if (status === 404) text = 'Zvolený model neexistuje. V Nastavení klikni na „Načíst modely“ a vyber jiný.';
+  else if (status === 404) text = 'Model AI není dostupný.';
   else if (status === 429) text = 'Překročen bezplatný limit Google AI. Zkus to za chvíli (nebo zítra).';
   else if (status >= 500) text = 'Služba Google AI je teď přetížená. Zkus to znovu.';
   else text = `Chyba ${status}: ${msg}`;
@@ -71,13 +72,44 @@ export async function listModels(key) {
     .filter((m) => isValidModel(m.id));
 }
 
-/** Vybere nejnovější stabilní model „flash“ (rychlý a zdarma). */
-export function pickDefaultModel(models) {
+/** Seřadí modely od nejvhodnějšího: alias „flash-latest“, pak nejnovější „flash“ (rychlé a zdarma). */
+export function rankModels(models) {
   const version = (id) => parseFloat((id.match(/gemini-(\d+(?:\.\d+)?)/) || [])[1] || '0');
-  const stable = models
-    .filter((m) => /flash/.test(m.id) && !/(lite|image|tts|audio|live|embed|preview|exp|thinking|latest)/.test(m.id))
-    .sort((a, b) => version(b.id) - version(a.id));
-  return stable[0]?.id || models.find((m) => m.id === DEFAULT_MODEL)?.id || models[0]?.id || DEFAULT_MODEL;
+  const score = (id) =>
+    (id === 'gemini-flash-latest' ? 1000 : 0) +
+    (/flash/.test(id) ? 100 : 0) -
+    (/lite/.test(id) ? 30 : 0) -
+    (/(preview|exp)/.test(id) ? 20 : 0) +
+    version(id);
+  return models
+    .map((m) => m.id)
+    .filter((id) => !/(image|tts|audio|live|embed|vision|learnlm|gemma|robotics|computer|thinking)/.test(id))
+    .sort((a, b) => score(b) - score(a));
+}
+
+/**
+ * Napíše odpověď a model si najde sám: zkusí uložený / výchozí model,
+ * a když neexistuje, vezme seznam modelů dostupných pro klíč a zkusí nejlepší.
+ */
+export async function generateAuto({ key, preferred, system, prompt, signal, onModel }) {
+  const first = isValidModel(preferred) ? preferred : DEFAULT_MODEL;
+  try {
+    return await generate({ key, model: first, system, prompt, signal });
+  } catch (e) {
+    if (e.status !== 404) throw e;
+  }
+  const candidates = rankModels(await listModels(key)).filter((id) => id !== first).slice(0, 5);
+  for (const id of candidates) {
+    try {
+      const res = await generate({ key, model: id, system, prompt, signal });
+      onModel?.(id);
+      return res;
+    } catch (e) {
+      if (e.status === 404 || e.status === 400) continue;
+      throw e;
+    }
+  }
+  throw new AiError('Pro tento klíč jsem nenašel žádný dostupný model Gemini.');
 }
 
 export async function generate({ key, model, system, prompt, signal }) {

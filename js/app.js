@@ -1,7 +1,7 @@
 import * as store from './storage.js';
 import { TRANSLATIONS, isValidTranslation, translationName, getBooks, getChapter } from './bible.js';
 import { czName, testament } from './books-cs.js';
-import { listModels, pickDefaultModel, generate, isValidModel, DEFAULT_MODEL } from './ai.js';
+import { listModels, rankModels, generateAuto, isValidModel, DEFAULT_MODEL } from './ai.js';
 import { LENGTHS, buildSystemPrompt, buildUserPrompt } from './prompt.js';
 import { renderMarkdown } from './markdown.js';
 
@@ -397,7 +397,11 @@ async function run() {
   const bookId = state.book.id;
   const lang = state.lang;
   const length = state.length;
-  const model = getModel();
+  let model = getModel();
+  const onModel = (id) => {
+    model = id;
+    store.save('model', id);
+  };
   const focus = $('#opt-focus').value.trim().slice(0, 300);
   const system = buildSystemPrompt(lang);
 
@@ -439,7 +443,7 @@ async function run() {
         for (let attempt = 0; ; attempt++) {
           try {
             ui.setStatus('AI píše komentář…');
-            answer = await generate({ key, model, system, prompt, signal: ctrl.signal });
+            answer = await generateAuto({ key, preferred: model, system, prompt, signal: ctrl.signal, onModel });
             break;
           } catch (e) {
             if (e.status === 429 && attempt < 2) {
@@ -497,14 +501,6 @@ async function run() {
 // ---------- nastavení ----------
 const dialog = $('#settings');
 
-function setModelOptions(models, selected) {
-  const sel = $('#model');
-  const list = models.length ? models : [{ id: selected, label: selected }];
-  if (!list.some((m) => m.id === selected)) list.unshift({ id: selected, label: selected });
-  sel.replaceChildren(...list.map((m) => el('option', { value: m.id, text: m.label })));
-  sel.value = selected;
-}
-
 function settingsStatus(text, kind = '') {
   const p = $('#settings-status');
   p.textContent = text;
@@ -515,18 +511,17 @@ function openSettings(message) {
   $('#api-key').value = getKey();
   $('#api-key').type = 'password';
   $('#btn-toggle-key').textContent = 'Ukázat';
-  setModelOptions([], getModel());
   settingsStatus(message || '', message ? 'error' : '');
   dialog.showModal();
 }
 
-async function loadModelsInto(key) {
-  settingsStatus('Ověřuji klíč a načítám modely…');
+/** Ověří klíč a rovnou vybere nejvhodnější model (uživatel nic nevolí). */
+async function verifyKeyAndPickModel(key) {
+  settingsStatus('Ověřuji klíč…');
   const models = await listModels(key);
-  const current = $('#model').value;
-  const keep = models.some((m) => m.id === current) ? current : pickDefaultModel(models);
-  setModelOptions(models, keep);
-  return models;
+  const best = rankModels(models)[0];
+  if (best) store.save('model', best);
+  return best;
 }
 
 function validKeyFormat(k) {
@@ -547,42 +542,22 @@ function setupSettings() {
     i.type = i.type === 'password' ? 'text' : 'password';
     $('#btn-toggle-key').textContent = i.type === 'password' ? 'Ukázat' : 'Skrýt';
   });
-  $('#btn-load-models').addEventListener('click', async () => {
-    const key = $('#api-key').value.trim();
-    if (!validKeyFormat(key)) return settingsStatus('Nejdřív vlož platný klíč.', 'error');
-    try {
-      const models = await loadModelsInto(key);
-      settingsStatus(`Klíč funguje ✓ Nalezeno ${models.length} modelů.`, 'ok');
-    } catch (e) {
-      settingsStatus(e.message, 'error');
-    }
-  });
   $('#btn-save-settings').addEventListener('click', async () => {
     const key = $('#api-key').value.trim();
     if (key && !validKeyFormat(key)) return settingsStatus('Klíč má neplatný formát (povolená jsou písmena, číslice a znaky . _ -, bez mezer, aspoň 20 znaků).', 'error');
-    const model = $('#model').value;
-    if (!isValidModel(model)) return settingsStatus('Neplatný model.', 'error');
     if (!key) {
       store.remove('apiKey');
-      store.save('model', model);
       updateKeyBanner();
       dialog.close();
       return;
     }
-    const firstTime = key !== getKey();
     store.save('apiKey', key);
-    store.save('model', model);
     updateKeyBanner();
-    if (firstTime) {
-      try {
-        await loadModelsInto(key);
-        store.save('model', $('#model').value);
-        settingsStatus(`Uloženo. Klíč funguje ✓ Model: ${$('#model').value}`, 'ok');
-      } catch (e) {
-        settingsStatus(`Uloženo, ale: ${e.message}`, 'error');
-      }
-    } else {
-      dialog.close();
+    try {
+      await verifyKeyAndPickModel(key);
+      settingsStatus('Uloženo. Klíč funguje ✓ Můžeš zavřít a psát komentáře.', 'ok');
+    } catch (e) {
+      settingsStatus(`Uloženo, ale: ${e.message}`, 'error');
     }
   });
   $('#btn-delete-key').addEventListener('click', () => {

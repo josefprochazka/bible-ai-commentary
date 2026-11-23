@@ -1,0 +1,32 @@
+# Hesla a klíče – nikdy do gitu
+.env
+.env.*
+*.local.json
+secrets.json
+appsettings.*.local.json
+.claude/settings.local.json
+
+# IDE
+.vs/
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+
+# Build a závislosti
+bin/
+obj/
+dist/
+build/
+node_modules/
+vendor/
+
+# Logy a dočasné soubory
+*.log
+tmp/
+temp/
+
+# Systémové soubory
+Thumbs.db
+.DS_Store
+desktop.ini

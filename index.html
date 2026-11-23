@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="cs">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self' https://bible.helloao.org https://generativelanguage.googleapis.com; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta name="referrer" content="no-referrer">
+  <meta name="theme-color" content="#1f3a5f">
+  <meta name="description" content="AI komentáře k vybraným veršům, kapitolám a knihám Bible.">
+  <title>Bible AI komentář</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="css/app.css">
+  <script type="module" src="js/app.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <img src="icons/icon.svg" alt="" width="32" height="32">
+      <span>Bible AI komentář</span>
+    </div>
+    <div class="topbar-actions">
+      <button id="btn-install" class="btn ghost small" type="button" hidden>Nainstalovat</button>
+      <button id="btn-settings" class="icon-btn" type="button" aria-label="Nastavení" title="Nastavení">
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h9M19 7h1M4 17h3M13 17h7"/><circle cx="16" cy="7" r="2.5"/><circle cx="10" cy="17" r="2.5"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <main id="main">
+    <div id="key-banner" class="banner" hidden>
+      <span>Pro psaní komentářů vlož svůj Google AI klíč (zdarma).</span>
+      <button id="btn-banner-settings" class="btn small" type="button">Nastavit klíč</button>
+    </div>
+
+    <section class="card" id="step-book">
+      <div class="card-head">
+        <h2 id="book-head"><span class="step">1</span> Kniha <span class="muted" id="book-current"></span></h2>
+        <label class="select-wrap" title="Překlad Bible">
+          <span class="sr-only">Překlad</span>
+          <select id="translation"></select>
+        </label>
+      </div>
+      <div class="tabs" role="tablist">
+        <button type="button" role="tab" data-testament="OT">Starý zákon</button>
+        <button type="button" role="tab" data-testament="NT">Nový zákon</button>
+        <button type="button" role="tab" data-testament="OTHER" hidden>Ostatní</button>
+      </div>
+      <input id="book-filter" class="input" type="search" placeholder="Hledat knihu… (např. Jan, Žalmy, Romans)" autocomplete="off">
+      <div id="book-grid" class="book-grid" aria-live="polite"></div>
+    </section>
+
+    <section class="card" id="step-chapters" hidden>
+      <div class="card-head">
+        <h2><span class="step">2</span> Kapitoly <span class="muted" id="book-title"></span></h2>
+        <button id="btn-change-book" class="btn ghost small" type="button">Změnit knihu</button>
+      </div>
+      <div class="toolbar">
+        <div class="seg" id="chap-mode" role="group" aria-label="Způsob výběru kapitol">
+          <button type="button" data-value="single">Jednotlivě</button>
+          <button type="button" data-value="range">Od – do</button>
+        </div>
+        <div class="toolbar-links">
+          <button id="chap-all" class="link" type="button">Vybrat vše</button>
+          <button id="chap-clear" class="link" type="button">Zrušit</button>
+        </div>
+      </div>
+      <p class="hint" id="chap-hint"></p>
+      <div id="chapter-grid" class="chip-grid"></div>
+    </section>
+
+    <section class="card" id="step-verses" hidden>
+      <div class="card-head">
+        <h2><span class="step">3</span> Verše <span class="muted">(nepovinné)</span></h2>
+      </div>
+      <div class="toolbar">
+        <div class="seg" id="verse-mode" role="group" aria-label="Způsob výběru veršů">
+          <button type="button" data-value="single">Jednotlivě</button>
+          <button type="button" data-value="range">Od – do</button>
+        </div>
+        <div class="toolbar-links">
+          <button id="verse-clear" class="link" type="button">Zrušit výběr</button>
+        </div>
+      </div>
+      <p class="hint" id="verse-hint"></p>
+      <div id="verse-list" class="verse-list"></div>
+    </section>
+
+    <section class="card" id="step-options">
+      <div class="card-head">
+        <h2><span class="step" id="options-step">3</span> Odpověď AI</h2>
+      </div>
+      <div class="option-row">
+        <span class="option-label">Jazyk</span>
+        <div class="seg" id="opt-lang" role="group" aria-label="Jazyk odpovědi">
+          <button type="button" data-value="cs">Česky</button>
+          <button type="button" data-value="en">English</button>
+        </div>
+      </div>
+      <div class="option-row">
+        <span class="option-label">Délka</span>
+        <div class="seg wrap" id="opt-length" role="group" aria-label="Délka odpovědi">
+          <button type="button" data-value="one">1 věta</button>
+          <button type="button" data-value="short">2–3 věty</button>
+          <button type="button" data-value="para">Odstavec</button>
+          <button type="button" data-value="detail">Podrobně</button>
+        </div>
+      </div>
+      <div class="option-row" id="row-split" hidden>
+        <span class="option-label">Více kapitol</span>
+        <div class="seg" id="opt-split" role="group" aria-label="Komentář pro více kapitol">
+          <button type="button" data-value="split">Každá zvlášť</button>
+          <button type="button" data-value="joined">Vše dohromady</button>
+        </div>
+      </div>
+      <div class="option-row column">
+        <label class="option-label" for="opt-focus">Na co se zaměřit <span class="muted">(nepovinné)</span></label>
+        <input id="opt-focus" class="input" type="text" maxlength="300" placeholder="např. historický kontext, význam pro dnešek, klíčová slova…" autocomplete="off">
+      </div>
+    </section>
+
+    <section id="results" aria-live="polite"></section>
+  </main>
+
+  <div class="actionbar">
+    <div class="actionbar-inner">
+      <div class="summary">
+        <span class="summary-label">Výběr</span>
+        <span id="selection-summary">Nic nevybráno</span>
+      </div>
+      <button id="btn-stop" class="btn ghost" type="button" hidden>Zastavit</button>
+      <button id="btn-run" class="btn primary" type="button" disabled>Napsat komentář</button>
+    </div>
+  </div>
+
+  <footer class="footer">
+    Biblický text: <a href="https://bible.helloao.org" target="_blank" rel="noopener noreferrer">Free Use Bible API</a>
+    · <span id="translation-credit"></span>
+    · Komentáře generuje Google Gemini – AI se může mýlit.
+  </footer>
+
+  <dialog id="settings" aria-labelledby="settings-title">
+    <div class="dialog">
+      <h2 id="settings-title">Nastavení</h2>
+      <label class="field">
+        <span>Google AI API klíč</span>
+        <div class="input-row">
+          <input id="api-key" class="input" type="password" autocomplete="off" spellcheck="false" placeholder="AIza…">
+          <button id="btn-toggle-key" class="btn ghost small" type="button">Ukázat</button>
+        </div>
+      </label>
+      <p class="small muted">
+        Klíč zdarma získáš na <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer">aistudio.google.com/apikey</a>.
+        Ukládá se jen v tomto prohlížeči a posílá se jen přímo Googlu.
+      </p>
+      <label class="field">
+        <span>Model</span>
+        <div class="input-row">
+          <select id="model" class="input"></select>
+          <button id="btn-load-models" class="btn ghost small" type="button">Načíst modely</button>
+        </div>
+      </label>
+      <p id="settings-status" class="small" role="status"></p>
+      <div class="dialog-actions">
+        <button id="btn-delete-key" class="btn ghost danger" type="button">Smazat klíč</button>
+        <span class="spacer"></span>
+        <button id="btn-close-settings" class="btn ghost" type="button">Zavřít</button>
+        <button id="btn-save-settings" class="btn primary" type="button">Uložit</button>
+      </div>
+    </div>
+  </dialog>
+</body>
+</html>

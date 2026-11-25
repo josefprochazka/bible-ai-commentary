@@ -52,12 +52,15 @@ function toError(status, data) {
   }
   let text;
   if (status === 400 && /api key/i.test(msg)) text = 'API klíč není platný. Zkontroluj ho v Nastavení.';
-  else if (status === 400) text = `Google AI požadavek odmítlo: ${msg}`;
+  else if (status === 400) text = 'Google AI požadavek odmítlo.';
   else if (status === 401 || status === 403) text = 'Klíč nemá oprávnění. Zkontroluj klíč a jeho omezení v Google Cloud.';
   else if (status === 404) text = 'Model AI není dostupný.';
   else if (status === 429) text = 'Překročen bezplatný limit Google AI. Zkus to za chvíli (nebo zítra).';
-  else if (status >= 500) text = 'Služba Google AI je teď přetížená. Zkus to znovu.';
-  else text = `Chyba ${status}: ${msg}`;
+  else if (status >= 500) text = 'Služba Google AI je teď přetížená. Zkus to za pár minut znovu.';
+  else text = 'Neočekávaná chyba Google AI.';
+  // Přesný kód a zpráva od Googlu, ať je vidět, co se děje (vykresluje se jako text, ne HTML).
+  const detail = msg.replace(/\s+/g, ' ').trim().slice(0, 300);
+  text += ` [chyba ${status}${detail ? `: ${detail}` : ''}]`;
   return new AiError(text, { status, retryAfterSec: retry });
 }
 
@@ -93,22 +96,30 @@ export function rankModels(models) {
  */
 export async function generateAuto({ key, preferred, system, prompt, signal, onModel }) {
   const first = isValidModel(preferred) ? preferred : DEFAULT_MODEL;
+  let overloaded = null; // poslední chyba 5xx (model přetížený) – zkusíme jiný model, ale neukládáme ho
   try {
     return await generate({ key, model: first, system, prompt, signal });
   } catch (e) {
-    if (e.status !== 404) throw e;
+    if (e.status >= 500) overloaded = e;
+    else if (e.status !== 404) throw e;
   }
   const candidates = rankModels(await listModels(key)).filter((id) => id !== first).slice(0, 5);
   for (const id of candidates) {
     try {
       const res = await generate({ key, model: id, system, prompt, signal });
-      onModel?.(id);
+      // Model ukládáme jen místo neexistujícího; při přetížení zůstane původní.
+      if (!overloaded) onModel?.(id);
       return res;
     } catch (e) {
       if (e.status === 404 || e.status === 400) continue;
+      if (e.status >= 500) {
+        overloaded ??= e;
+        continue;
+      }
       throw e;
     }
   }
+  if (overloaded) throw overloaded;
   throw new AiError('Pro tento klíč jsem nenašel žádný dostupný model Gemini.');
 }
 

@@ -446,10 +446,12 @@ async function run() {
             answer = await generateAuto({ key, preferred: model, system, prompt, signal: ctrl.signal, onModel });
             break;
           } catch (e) {
-            if (e.status === 429 && attempt < 2) {
-              const wait = Math.min(Math.max(e.retryAfterSec ?? 30, 5), 90);
+            const busy = e.status >= 500;
+            if ((e.status === 429 || busy) && attempt < 2) {
+              const wait = busy ? 10 * (attempt + 1) : Math.min(Math.max(e.retryAfterSec ?? 30, 5), 90);
+              const why = busy ? 'Google AI je přetížená' : 'Limit Google AI';
               for (let s = wait; s > 0; s--) {
-                ui.setStatus(`Limit Google AI – čekám ${s} s a zkusím to znovu…`);
+                ui.setStatus(`${why} – čekám ${s} s a zkusím to znovu (${attempt + 2}/3)…`);
                 await sleep(1000, ctrl.signal);
               }
               continue;

@@ -1,6 +1,6 @@
 // Service worker: appka funguje i offline a biblické texty se ukládají do mezipaměti.
 // Dotazy na AI (googleapis.com) se NIKDY neukládají.
-const VERSION = 'v3';
+const VERSION = 'v4';
 const SHELL_CACHE = `shell-${VERSION}`;
 const BIBLE_CACHE = 'bible-v1';
 const BIBLE_ORIGIN = 'https://bible.helloao.org';
